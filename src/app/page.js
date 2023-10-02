@@ -6,25 +6,29 @@ import Form from "@/components/Form";
 import Container from "@/components/Container";
 import axios from "axios";
 import { useState } from "react";
+import PaypalForm from "@/components/PaypalForm";
 
 export default function Home() {
   const [clientSecret, setClientSecret] = useState();
+  const [email, setEmail] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("paypal");
   const [cartId, setCartId] = useState();
+
+  const test_cart = [
+    {
+      quantity: 2,
+      product: 1,
+    },
+  ];
 
   const handleCheckout = async (e) => {
     e.preventDefault();
-    const email = e.target[0].value;
     if (!email) return alert("email required");
     const order_response = await axios.post(
       `${process.env.NEXT_PUBLIC_API_URL}/checkout`,
       {
-        email: email,
-        items: [
-          {
-            quantity: 1,
-            product: 1,
-          },
-        ],
+        email,
+        items: test_cart,
       }
     );
 
@@ -36,25 +40,68 @@ export default function Home() {
         medusa_cart_id: _cart_id,
       }
     );
+    // when we have multiple method we need to select the method that will be used to complete payment
+    const select_session_response = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_URL}/select-payment-session`,
+      {
+        medusa_cart_id: _cart_id,
+        provider_id: paymentMethod,
+      }
+    );
 
-    const _client_secret =
-      payment_session_response.data.cart.payment_session.data.client_secret;
+    if (paymentMethod === "stripe") {
+      const _client_secret =
+        select_session_response.data.cart.payment_sessions.find(
+          (ps) => ps.provider_id === "stripe"
+        ).data.client_secret;
+
+      setClientSecret(_client_secret);
+    }
+    setCartId(_cart_id);
     // console.log(payment_session_response.data)
     // console.log('response ',payment_session_response.data.cart.payment_session.data.client_secret)
-    setCartId(_cart_id);
-    setClientSecret(_client_secret);
   };
   return (
     <main>
       {!clientSecret && (
         <form onSubmit={handleCheckout}>
-          <input required placeholder="email" type="email" name="email" />
+          <label>
+            <input
+              type="radio"
+              value="paypal"
+              checked={paymentMethod === "paypal"}
+              onChange={(e) => setPaymentMethod("paypal")}
+            />
+            Paypal
+          </label>
+          <label>
+            <input
+              type="radio"
+              value="stripe"
+              checked={paymentMethod === "stripe"}
+              onChange={(e) => setPaymentMethod("stripe")}
+            />
+            Stripe
+          </label>
+
+          <input
+            required
+            placeholder="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            name="email"
+          />
           <button type="submit">checkout</button>
         </form>
       )}
 
-      {clientSecret && cartId && (
+      {paymentMethod === "stripe" && clientSecret && cartId && (
         <Container cartId={cartId} clientSecret={clientSecret} />
+      )}
+      {/* NOTE: amount should be calculated from cart items */}
+      {paymentMethod === "paypal" && cartId && (
+        <PaypalForm amount={30} cartId={cartId} />
       )}
     </main>
   );
