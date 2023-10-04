@@ -2,21 +2,20 @@
 
 import Image from "next/image";
 import styles from "./page.module.css";
-import Form from "@/components/Form";
-import Container from "@/components/Container";
+import StripeForm from "@/components/StripeForm";
 import axios from "axios";
 import { useState } from "react";
 import PaypalForm from "@/components/PaypalForm";
+import SquareForm from "@/components/SquareForm";
 
 export default function Home() {
-  const [clientSecret, setClientSecret] = useState();
-  const [email, setEmail] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("paypal");
+  const [email, setEmail] = useState("h@h.hh");
+  const [paymentMethod, setPaymentMethod] = useState("square");
   const [cartId, setCartId] = useState();
 
   const test_cart = [
     {
-      quantity: 2,
+      quantity: 1,
       product: 1,
     },
   ];
@@ -24,46 +23,38 @@ export default function Home() {
   const handleCheckout = async (e) => {
     e.preventDefault();
     if (!email) return alert("email required");
-    const order_response = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/checkout`,
-      {
-        email,
-        items: test_cart,
-      }
-    );
+
+    let order_response;
+
+    try {
+      order_response = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/checkout`,
+        {
+          email,
+          items: test_cart,
+        }
+      );
+    } catch (err) {
+      return alert(
+        "fail to create order, make sure that product with id:1 in stock and contain activation keys"
+      );
+    }
 
     const _cart_id = order_response.data.medusa.draft_order.cart_id;
-
-    const payment_session_response = await axios.post(
+    await axios.post(
       `${process.env.NEXT_PUBLIC_API_URL}/create-payment-session`,
       {
         medusa_cart_id: _cart_id,
       }
     );
-    // when we have multiple method we need to select the method that will be used to complete payment
-    const select_session_response = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/select-payment-session`,
-      {
-        medusa_cart_id: _cart_id,
-        provider_id: paymentMethod,
-      }
-    );
 
-    if (paymentMethod === "stripe") {
-      const _client_secret =
-        select_session_response.data.cart.payment_sessions.find(
-          (ps) => ps.provider_id === "stripe"
-        ).data.client_secret;
-
-      setClientSecret(_client_secret);
-    }
     setCartId(_cart_id);
     // console.log(payment_session_response.data)
     // console.log('response ',payment_session_response.data.cart.payment_session.data.client_secret)
   };
   return (
     <main>
-      {!clientSecret && (
+      {!cartId && (
         <form onSubmit={handleCheckout}>
           <label>
             <input
@@ -83,6 +74,15 @@ export default function Home() {
             />
             Stripe
           </label>
+          <label>
+            <input
+              type="radio"
+              value="square"
+              checked={paymentMethod === "square"}
+              onChange={(e) => setPaymentMethod("square")}
+            />
+            Square
+          </label>
 
           <input
             required
@@ -96,12 +96,13 @@ export default function Home() {
         </form>
       )}
 
-      {paymentMethod === "stripe" && clientSecret && cartId && (
-        <Container cartId={cartId} clientSecret={clientSecret} />
-      )}
+      {paymentMethod === "stripe" && cartId && <StripeForm cartId={cartId} />}
       {/* NOTE: amount should be calculated from cart items */}
       {paymentMethod === "paypal" && cartId && (
         <PaypalForm amount={30} cartId={cartId} />
+      )}
+      {paymentMethod === "square" && cartId && (
+        <SquareForm amount={30} cartId={cartId} />
       )}
     </main>
   );
